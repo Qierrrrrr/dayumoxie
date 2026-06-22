@@ -518,6 +518,17 @@
     border-color: var(--gold);
     background: rgba(154,123,63,0.05);
   }
+  .drag-fill-content {
+    cursor: grab;
+    font-family: var(--serif);
+    font-size: 1.05rem;
+    color: var(--ink);
+    text-align: center;
+    user-select: none;
+  }
+  .drag-fill-content:active {
+    cursor: grabbing;
+  }
 
   .sort-drop-zone {
     min-height: 60px;
@@ -988,20 +999,66 @@ function handleDragFillOver(e) {
 
 function handleDragFillDrop(e) {
   e.preventDefault();
-  const slot = e.target;
+  let slot = e.target;
+  if (!slot.classList.contains('drag-fill-slot')) {
+    slot = slot.closest('.drag-fill-slot');
+  }
+  if (!slot) return;
+  
   slot.classList.remove('drag-over');
   
   const originalIdx = parseInt(e.dataTransfer.getData('text/plain'));
   const passage = passages[currentPassageIndex];
   const segment = passage.segments[originalIdx];
   
-  const sourceItem = document.querySelector(`.sort-item[data-original-index="${originalIdx}"]`);
-  if (!sourceItem) return;
+  const sourceArea = document.getElementById('drag-fill-source');
   
-  sourceItem.remove();
+  if (slot.dataset.filledIndex) {
+    const oldIdx = parseInt(slot.dataset.filledIndex);
+    const oldSegment = passage.segments[oldIdx];
+    
+    const existsInSource = sourceArea.querySelector(`.sort-item[data-original-index="${oldIdx}"]`);
+    if (!existsInSource) {
+      const oldItem = document.createElement('div');
+      oldItem.className = 'sort-item';
+      oldItem.textContent = oldSegment;
+      oldItem.dataset.originalIndex = oldIdx;
+      oldItem.dataset.segment = encodeURIComponent(oldSegment);
+      oldItem.draggable = true;
+      oldItem.addEventListener('dragstart', (evt) => {
+        evt.dataTransfer.setData('text/plain', oldIdx);
+        evt.target.classList.add('dragging');
+      });
+      oldItem.addEventListener('dragend', (evt) => {
+        evt.target.classList.remove('dragging');
+      });
+      oldItem.addEventListener('dblclick', () => {
+        oldItem.remove();
+        const targetSlot = document.querySelector(`.drag-fill-slot[data-slot-index="${oldIdx}"]`);
+        if (targetSlot) {
+          targetSlot.classList.add('filled');
+          targetSlot.innerHTML = `<span class="drag-fill-content" draggable="true" data-original-index="${oldIdx}" ondragstart="handleDragStart(event)" ondragend="handleDragEnd(event)">${oldSegment}</span>`;
+          targetSlot.dataset.filledIndex = oldIdx;
+        }
+      });
+      sourceArea.appendChild(oldItem);
+    }
+  }
+  
+  const sourceItem = document.querySelector(`.sort-item[data-original-index="${originalIdx}"]`);
+  if (sourceItem) {
+    sourceItem.remove();
+  } else {
+    const oldSlot = document.querySelector(`.drag-fill-slot[data-filled-index="${originalIdx}"]`);
+    if (oldSlot && oldSlot !== slot) {
+      oldSlot.classList.remove('filled');
+      oldSlot.innerHTML = '';
+      delete oldSlot.dataset.filledIndex;
+    }
+  }
   
   slot.classList.add('filled');
-  slot.innerHTML = segment;
+  slot.innerHTML = `<span class="drag-fill-content" draggable="true" data-original-index="${originalIdx}" ondragstart="handleDragStart(event)" ondragend="handleDragEnd(event)">${segment}</span>`;
   slot.dataset.filledIndex = originalIdx;
 }
 
@@ -1496,3 +1553,4 @@ renderDragFillPassage();
 </script>
 </body>
 </html>
+
