@@ -275,6 +275,8 @@
     font-size: 1.05rem;
     line-height: 2.6;
     text-align: justify;
+    letter-spacing: 0;
+    word-spacing: 0;
   }
 
   .segment-selectable {
@@ -325,14 +327,27 @@
     margin-left: 1px;
   }
 
+  .result-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: rgba(0,0,0,0.4);
+    display: none;
+    justify-content: center;
+    align-items: center;
+    z-index: 1000;
+  }
   .result-panel {
     background: var(--card);
     border: 1px solid var(--border);
-    padding: 32px;
+    padding: 40px;
     text-align: center;
-    margin-top: 24px;
-    border-radius: 8px;
-    display: none;
+    border-radius: 12px;
+    min-width: 320px;
+    box-shadow: 0 12px 40px rgba(0,0,0,0.15);
+    position: relative;
   }
 
   .edit-toggle {
@@ -624,6 +639,93 @@
     text-align: center;
     letter-spacing: 0.05em;
   }
+
+  .recite-blank {
+    display: inline-flex;
+    align-items: center;
+    margin: 0 4px;
+    border-radius: 6px;
+    overflow: hidden;
+    transition: all 0.2s;
+    border: 1px solid var(--border);
+    user-select: none;
+    background: var(--card);
+    vertical-align: middle;
+    height: 1.6em;
+  }
+  .recite-half {
+    padding: 8px 10px;
+    cursor: pointer;
+    transition: all 0.2s;
+    min-width: 20px;
+    min-height: 28px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+  .recite-half-check:hover:not(.disabled) {
+    background: rgba(74,124,89,0.15);
+  }
+  .recite-half-cross:hover:not(.disabled) {
+    background: rgba(168,64,47,0.15);
+  }
+  .recite-half-check {
+    background: transparent;
+  }
+  .recite-half-cross {
+    background: transparent;
+  }
+  .recite-blank.selected-check {
+    background: rgba(74,124,89,0.35);
+    border-color: var(--correct);
+  }
+  .recite-blank.selected-check .recite-blank-text.hidden {
+    color: rgba(255,255,255,0.3);
+  }
+  .recite-blank.selected-cross {
+    background: rgba(168,64,47,0.35);
+    border-color: var(--wrong);
+  }
+  .recite-blank.selected-cross .recite-blank-text.hidden {
+    color: rgba(255,255,255,0.3);
+  }
+  .recite-half.disabled {
+    cursor: not-allowed;
+  }
+  .recite-text {
+    font-family: var(--serif);
+    font-size: 1.05rem;
+    line-height: 2.6;
+    color: var(--ink);
+    letter-spacing: 0;
+  }
+  .recite-blank-text {
+    font-family: var(--serif);
+    font-size: 1.05rem;
+    line-height: 1.6;
+    color: var(--ink);
+    min-width: 20px;
+    padding: 0 6px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    letter-spacing: 0;
+  }
+  .recite-blank-text.hidden {
+    color: transparent !important;
+    user-select: none;
+  }
+  .recite-blank.revealed:not(.selected-check):not(.selected-cross) {
+    background: var(--card);
+    border-color: var(--border);
+  }
+  .recite-hint {
+    font-size: 0.74rem;
+    color: var(--muted);
+    margin-bottom: 16px;
+    text-align: center;
+    letter-spacing: 0.05em;
+  }
 </style>
 </head>
 <body>
@@ -655,16 +757,16 @@
   <main>
     <div class="passage-area" id="passage-area">
       <div class="passage-card" id="passage-container"></div>
-      <div class="result-panel" id="result-panel"></div>
     </div>
 
     <aside class="control-sidebar">
       <div class="control-section">
         <span class="control-label">练习模式</span>
         <div class="mode-tabs">
-          <button class="mode-tab active" data-mode="drag-fill" onclick="setPracticeMode('drag-fill', this)">拖句子填空</button>
+          <button class="mode-tab active" data-mode="drag-fill" onclick="setPracticeMode('drag-fill', this)">填句成章</button>
           <button class="mode-tab" data-mode="sort" onclick="setPracticeMode('sort', this)">全文排序</button>
           <button class="mode-tab" data-mode="write" onclick="setPracticeMode('write', this)">默写填空</button>
+          <button class="mode-tab" data-mode="recite" onclick="setPracticeMode('recite', this)">背诵模式</button>
         </div>
       </div>
 
@@ -697,6 +799,10 @@
       </div>
     </aside>
   </main>
+
+  <div class="result-overlay" id="result-overlay">
+    <div class="result-panel" id="result-panel"></div>
+  </div>
 
 <script>
 const passages = [
@@ -859,12 +965,20 @@ function setDifficulty(level, btn) {
   difficulty = level;
   document.querySelectorAll('.difficulty-btn').forEach(b => b.classList.remove('active'));
   btn.classList.add('active');
+  
+  if (currentMode === 'drag-fill') {
+    renderDragFillPassage();
+  } else if (currentMode === 'write') {
+    renderPassage();
+  } else if (currentMode === 'recite') {
+    renderRecitePassage();
+  }
 }
 
 function resetView() {
   document.getElementById('passage-container').innerHTML = '';
   document.getElementById('result-panel').innerHTML = '';
-  document.getElementById('result-panel').style.display = 'none';
+  document.getElementById('result-overlay').style.display = 'none';
   document.getElementById('check-btn').style.display = 'none';
   document.getElementById('reveal-btn').style.display = 'none';
   document.getElementById('start-btn').style.display = 'block';
@@ -887,7 +1001,7 @@ function setPracticeMode(mode, btn) {
   document.getElementById('check-btn').style.display = 'none';
   document.getElementById('reveal-btn').style.display = 'none';
   document.getElementById('check-sort-btn').style.display = 'none';
-  document.getElementById('result-panel').style.display = 'none';
+  document.getElementById('result-overlay').style.display = 'none';
   
   document.getElementById('edit-mode').checked = false;
   editMode = false;
@@ -904,6 +1018,10 @@ function setPracticeMode(mode, btn) {
     difficultySection.style.display = 'block';
     writeOptions.style.display = 'block';
     renderPassage();
+  } else if (mode === 'recite') {
+    difficultySection.style.display = 'block';
+    writeOptions.style.display = 'block';
+    renderRecitePassage();
   } else {
     difficultySection.style.display = 'block';
     writeOptions.style.display = 'none';
@@ -944,7 +1062,7 @@ function checkSortAnswers() {
     </div>
     <button class="btn btn-primary" id="retry-btn">再练一次</button>
   `;
-  panel.style.display = 'block';
+  document.getElementById('result-overlay').style.display = 'flex';
   document.getElementById('retry-btn').addEventListener('click', () => {
     const btn = document.querySelector('.mode-tab[data-mode="sort"]');
     setPracticeMode('sort', btn);
@@ -1090,10 +1208,128 @@ function checkDragFillAnswers() {
     <div class="result-label">正确率 ${pct}%</div>
     <button class="btn btn-primary" id="retry-btn">再练一次</button>
   `;
-  panel.style.display = 'block';
+  document.getElementById('result-overlay').style.display = 'flex';
   document.getElementById('retry-btn').addEventListener('click', () => {
     const btn = document.querySelector('.mode-tab[data-mode="drag-fill"]');
     setPracticeMode('drag-fill', btn);
+  });
+}
+
+let reciteSelections = new Map();
+let reciteRevealed = false;
+
+function renderRecitePassage() {
+  const passage = passages[currentPassageIndex];
+  const segments = passage.segments;
+  
+  const blankIndices = new Set();
+  const blankCount = Math.max(1, Math.floor(segments.length * difficulty));
+  
+  while (blankIndices.size < blankCount) {
+    blankIndices.add(Math.floor(Math.random() * segments.length));
+  }
+  
+  reciteSelections.clear();
+  reciteRevealed = false;
+  
+  const container = document.getElementById('passage-container');
+  let html = `
+    <div class="passage-card">
+      <div class="passage-title">${passage.title}</div>
+      <div class="passage-meta">${passage.meta}</div>
+      <div class="recite-hint">点击空白处左侧或右侧选择状态</div>
+      <div class="passage-text" id="recite-content">
+  `;
+  
+  segments.forEach((seg, idx) => {
+    if (blankIndices.has(idx)) {
+      html += `
+        <span class="recite-blank" data-blank-index="${idx}">
+          <span class="recite-half recite-half-check" onclick="toggleReciteSelection(${idx}, 'check')"></span>
+          <span class="recite-blank-text hidden">${seg}</span>
+          <span class="recite-half recite-half-cross" onclick="toggleReciteSelection(${idx}, 'cross')"></span>
+        </span>
+      `;
+    } else {
+      html += `<span class="recite-text">${seg}</span>`;
+    }
+  });
+  
+  html += `</div></div>`;
+  container.innerHTML = html;
+  
+  document.getElementById('start-btn').style.display = 'none';
+  document.getElementById('check-btn').style.display = 'block';
+  document.getElementById('reveal-btn').style.display = 'block';
+  document.getElementById('check-sort-btn').style.display = 'none';
+  document.getElementById('result-overlay').style.display = 'none';
+  
+  document.getElementById('check-btn').textContent = '检查答案';
+  document.getElementById('reveal-btn').textContent = '完成练习';
+}
+
+function toggleReciteSelection(blankIdx, type) {
+  const blank = document.querySelector(`.recite-blank[data-blank-index="${blankIdx}"]`);
+  if (blank.querySelector('.recite-half.disabled')) return;
+  
+  if (type === 'check') {
+    if (reciteSelections.get(blankIdx) === 'check') {
+      reciteSelections.delete(blankIdx);
+      blank.classList.remove('selected-check');
+    } else {
+      reciteSelections.set(blankIdx, 'check');
+      blank.classList.add('selected-check');
+      blank.classList.remove('selected-cross');
+    }
+  } else {
+    if (reciteSelections.get(blankIdx) === 'cross') {
+      reciteSelections.delete(blankIdx);
+      blank.classList.remove('selected-cross');
+    } else {
+      reciteSelections.set(blankIdx, 'cross');
+      blank.classList.add('selected-cross');
+      blank.classList.remove('selected-check');
+    }
+  }
+}
+
+function checkReciteAnswers() {
+  const blanks = document.querySelectorAll('.recite-blank');
+  blanks.forEach(blank => {
+    const textSpan = blank.querySelector('.recite-blank-text');
+    textSpan.classList.remove('hidden');
+    blank.classList.add('revealed');
+  });
+  
+  document.getElementById('check-btn').style.display = 'none';
+}
+
+function finishRecitePractice() {
+  const blanks = document.querySelectorAll('.recite-blank');
+  let correctCount = 0;
+  
+  blanks.forEach(blank => {
+    const blankIdx = parseInt(blank.dataset.blankIndex);
+    const halves = blank.querySelectorAll('.recite-half');
+    halves.forEach(half => half.classList.add('disabled'));
+    if (reciteSelections.get(blankIdx) === 'check') {
+      correctCount++;
+    }
+  });
+  
+  const total = blanks.length;
+  const pct = total > 0 ? Math.round((correctCount / total) * 100) : 0;
+  
+  const panel = document.getElementById('result-panel');
+  panel.innerHTML = `
+    <div class="result-score">${correctCount} / ${total}</div>
+    <div class="result-label">正确率 ${pct}%</div>
+    <button class="btn btn-primary" id="retry-btn">再练一次</button>
+  `;
+  document.getElementById('result-overlay').style.display = 'flex';
+  document.getElementById('retry-btn').addEventListener('click', () => {
+    const btn = document.querySelector('.mode-tab[data-mode="recite"]');
+    setPracticeMode('recite', btn);
   });
 }
 
@@ -1451,7 +1687,7 @@ function startPractice() {
   document.getElementById('start-btn').style.display = 'none';
   document.getElementById('check-btn').style.display = 'block';
   document.getElementById('reveal-btn').style.display = 'block';
-  document.getElementById('result-panel').style.display = 'none';
+  document.getElementById('result-overlay').style.display = 'none';
   checked = false;
 
   const inputs = container.querySelectorAll('.blank-input');
@@ -1516,15 +1752,27 @@ function showResult(correct, total, revealed) {
     <div class="result-label">${revealed ? '已显示全文' : '正确率 ' + pct + '%'}</div>
     <button class="btn btn-primary" id="retry-btn">再练一次</button>
   `;
-  panel.style.display = 'block';
+  document.getElementById('result-overlay').style.display = 'flex';
   document.getElementById('retry-btn').addEventListener('click', () => {
     resetView();
   });
 }
 
 document.getElementById('start-btn').addEventListener('click', startPractice);
-document.getElementById('check-btn').addEventListener('click', checkAnswers);
-document.getElementById('reveal-btn').addEventListener('click', revealAll);
+document.getElementById('check-btn').addEventListener('click', () => {
+  if (currentMode === 'recite') {
+    checkReciteAnswers();
+  } else {
+    checkAnswers();
+  }
+});
+document.getElementById('reveal-btn').addEventListener('click', () => {
+  if (currentMode === 'recite') {
+    finishRecitePractice();
+  } else {
+    revealAll();
+  }
+});
 document.getElementById('check-sort-btn').addEventListener('click', () => {
   if (currentMode === 'sort') {
     checkSortAnswers();
